@@ -2,17 +2,17 @@
 
 > A live ISS tracking and projection experience that I built for space enthusiasts, makers, educators, and anyone who wants a beautiful real-time orbital display without specialized hardware.
 
-## 🚀 About the Project
+##  About the Project
 
-Hi! I'm the creator of **Sub-Orbital Sentinel v2**.
+Greetings from the creator of **Sentinel**
 
-I designed this project to provide a clean and immersive way to track the **International Space Station (ISS)** in real time. The project includes both a powerful control panel and a distraction-free projection view that can be displayed on walls, monitors, projectors, or ceilings.
+Designed this project to provide a clean and immersive way to track the **International Space Station (ISS)** in real time. The project includes both a powerful control panel and a distraction-free projection view that can be displayed on walls, monitors, projectors, or ceilings.
 
 Whether you're experimenting with home planetariums, learning about orbital mechanics, or just enjoying space data, this project is designed to be easy to deploy and simple to customize.
 
 ---
 
-## ✨ Features
+## Features
 
 - Live ISS position tracking
 - Real-time telemetry updates
@@ -28,7 +28,7 @@ Whether you're experimenting with home planetariums, learning about orbital mech
 
 ---
 
-## 📄 Pages
+## Pages
 
 | Page | Purpose |
 |--------|---------|
@@ -41,27 +41,7 @@ Any changes made in the Control Panel are automatically synchronized to the Proj
 
 ---
 
-## 🛠️ Project Structure
-
-```text
-├── index.html
-├── view.html
-├── css/
-│   └── control.css
-├── js/
-│   ├── app.js
-│   ├── control.js
-│   ├── renderer.js
-│   ├── renderer-view.js
-│   ├── tracker.js
-│   ├── stars.js
-│   └── satellites.js
-└── README.md
-```
-
----
-
-## ⚡ Running Locally
+##  Running Locally
 
 ### Windows
 
@@ -172,7 +152,7 @@ https://yourusername.github.io/sub-orbital-sentinel
 
 ---
 
-## 🛰️ Using Projection Mode
+## Using Projection Mode
 
 ### Standard Projection
 
@@ -189,7 +169,7 @@ https://yourusername.github.io/sub-orbital-sentinel
 
 ---
 
-## 🔄 How Synchronization Works
+## How Synchronization Works
 
 The project uses the browser's **BroadcastChannel API** to synchronize:
 
@@ -212,7 +192,27 @@ When the API becomes unavailable, the application automatically switches to a si
 
 ---
 
-## 🤝 Contributing
+## Project Structure
+
+```text
+├── index.html
+├── view.html
+├── css/
+│   └── control.css
+├── js/
+│   ├── app.js
+│   ├── control.js
+│   ├── renderer.js
+│   ├── renderer-view.js
+│   ├── tracker.js
+│   ├── stars.js
+│   └── satellites.js
+└── README.md
+```
+
+---
+
+##  Contributing
 
 Pull requests, bug reports, and feature suggestions are welcome.
 
@@ -220,7 +220,7 @@ If you improve the project, feel free to open an issue or submit a pull request 
 
 ---
 
-## 📜 License
+##  License
 
 MIT License
 
