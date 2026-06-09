@@ -9,7 +9,8 @@ window.Tracker = (function(){
   
   // The NORAD IDs matching your view.html catalog
   const TARGET_IDS = [25544, 20580, 43205, 25338, 28654, 27424, 39084, 44713, 44914];
-  const CELESTRAK_URL = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${TARGET_IDS.join(',')}&FORMAT=tle`;
+    // Routing through a free CORS proxy to bypass browser security blocks
+  const CELESTRAK_URL = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://celestrak.org/NORAD/elements/gp.php?CATNR=' + TARGET_IDS.join(',') + '&FORMAT=tle')}`;
 
   // ── Event Emitter ─────────────────────────────────────
   function on(name, cb) { events[name].push(cb); }
