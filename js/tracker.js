@@ -1,140 +1,176 @@
-// tracker.js — ISS data fetching and orbital math
+// tracker.js — Multi-satellite tracker with POV modes
 
-window.Tracker = (function () {
-  const API_URL = 'https://api.wheretheiss.at/v1/satellites/25544';
+window.Tracker = (function(){
+  const API_BASE = 'https://api.wheretheiss.at/v1/satellites/';
+  // Only ISS has a reliable free real-time API; others are simulated from TLE
+  const LIVE_IDS = [25544];
   const REFRESH_MS = 5000;
 
-  let issData = {
-    latitude: 0, longitude: 0,
-    altitude: 408, velocity: 27600,
-    footprint: 4500, visibility: 'daylight',
-    timestamp: 0,
-  };
-  let trail = [];
-  let orbit = [];
+  let satellites = {}; // id -> { lat, lon, alt, velocity, footprint, visibility, trail:[], orbit:[] }
   let listeners = {};
   let timer = null;
-  let useDemoMode = false;
-  let demoAngle = 0;
+  let demoMode = false;
+  let demoAngles = {};
+  let myLat = null, myLon = null;
 
-  function on(event, fn) {
-    listeners[event] = listeners[event] || [];
-    listeners[event].push(fn);
-  }
+  // POV MODES
+  const POV_MODES = {
+    MY_LOCATION: 'my_location',   // satellites near me / overhead
+    ISS:         '25544',
+    HUBBLE:      '20580',
+    TIANGONG:    '48274',
+    NOAA20:      '43205',
+    STARLINK:    '44713',
+    GLOBAL:      'global',         // show all
+  };
 
-  function emit(event, data) {
-    (listeners[event] || []).forEach(fn => fn(data));
-  }
+  let currentPOV = POV_MODES.MY_LOCATION;
+  let activeSatIds = [25544]; // which sats to track
 
-  async function fetch_iss() {
-    if (useDemoMode) {
-      simulateOrbit();
-      return;
+  Object.keys(SATELLITE_CATALOG).forEach(id => { demoAngles[id] = Math.random() * Math.PI * 2; });
+
+  function on(e, fn){ listeners[e] = listeners[e]||[]; listeners[e].push(fn); }
+  function emit(e, d){ (listeners[e]||[]).forEach(f=>f(d)); }
+
+  function setPOV(pov){
+    currentPOV = pov;
+    if(pov === POV_MODES.MY_LOCATION || pov === POV_MODES.GLOBAL){
+      activeSatIds = Object.keys(SATELLITE_CATALOG).map(Number);
+    } else {
+      activeSatIds = [parseInt(pov)];
     }
-    try {
-      const res = await fetch(API_URL);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const d = await res.json();
-      issData = d;
-
-      trail.push([d.latitude, d.longitude]);
-      if (trail.length > 80) trail.shift();
-
-      computeOrbit(d.latitude, d.longitude);
-      emit('update', { ...issData, trail, orbit });
-      emit('status', 'live');
-    } catch (e) {
-      console.warn('ISS API unavailable, switching to demo mode:', e.message);
-      useDemoMode = true;
-      emit('status', 'demo');
-      simulateOrbit();
-    }
+    emit('pov_changed', { pov, activeSatIds });
   }
 
-  function simulateOrbit() {
-    // Simulate ISS moving along its orbital track
-    demoAngle += 0.0012;
-    const inc = 51.64 * Math.PI / 180;
-    const lat = Math.asin(Math.sin(inc) * Math.sin(demoAngle)) * 180 / Math.PI;
-    const lon = (((demoAngle * 180 / Math.PI) % 360) + 360) % 360 - 180;
-    issData = {
-      latitude: lat, longitude: lon,
-      altitude: 408 + Math.sin(demoAngle * 3) * 2,
-      velocity: 7.66 + Math.random() * 0.01,
-      footprint: 4500, visibility: lat > 0 ? 'daylight' : 'eclipsed',
-      timestamp: Date.now() / 1000,
-    };
-    trail.push([lat, lon]);
-    if (trail.length > 80) trail.shift();
-    computeOrbit(lat, lon);
-    emit('update', { ...issData, trail, orbit });
+  function setLocation(lat, lon){ myLat=lat; myLon=lon; }
+
+  async function fetchSat(id){
+    if(demoMode || !LIVE_IDS.includes(id)) return null;
+    try{
+      const r = await fetch(API_BASE + id);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return await r.json();
+    } catch(e){ return null; }
   }
 
-  function computeOrbit(lat, lon) {
-    orbit = [];
-    const inc = 51.64;
-    const period = 92.68; // minutes
-    const earthRotPerPeriod = (period / (24 * 60)) * 360;
-
-    for (let i = 0; i <= period * 2; i += 1.5) {
-      const frac = i / period;
-      const oLat = inc * Math.sin(frac * 2 * Math.PI);
-      const oLon = ((lon + frac * 360 - frac * earthRotPerPeriod * 0.5) + 540) % 360 - 180;
-      orbit.push([oLat, oLon]);
-    }
+  function simulateSat(id, dt){
+    const cat = SATELLITE_CATALOG[id];
+    if(!cat) return null;
+    demoAngles[id] = (demoAngles[id]||0) + 0.00012 * (dt||1) * (92.68/cat.period);
+    const a = demoAngles[id];
+    const inc = cat.inc * Math.PI/180;
+    const lat = Math.asin(Math.sin(inc)*Math.sin(a)) * 180/Math.PI;
+    const lon = (((a*180/Math.PI) + id*37.3) % 360 + 360) % 360 - 180;
+    return { latitude:lat, longitude:lon, altitude:cat.alt+(Math.sin(a*3)*3), velocity:cat.alt<600?27600:26400, footprint:cat.alt*10.8, visibility: lat>0?'daylight':'eclipsed' };
   }
 
-  function getOrbitProgress() {
-    // Return 0-1 fraction of current orbit based on time
-    const now = Date.now() / 1000;
-    const periodSec = 92.68 * 60;
-    return (now % periodSec) / periodSec;
-  }
+  async function tick(){
+    const updates = {};
+    let anyLive = false;
 
-  function getPassETA(myLat, myLon) {
-    if (myLat === null || !orbit.length) return null;
-    let minDist = Infinity;
-    let minTime = 0;
-    const inc = 51.64;
-    const period = 92.68;
-    const lon = issData.longitude;
-
-    // Sample future positions over next 2 orbits
-    for (let t = 0; t <= period * 2; t += 0.5) {
-      const frac = t / period;
-      const futureLat = inc * Math.sin((demoAngle + frac * 2 * Math.PI));
-      const futureLon = ((lon + frac * 360) + 540) % 360 - 180;
-      const dist = haversine(myLat, myLon, futureLat, futureLon);
-      if (dist < minDist) {
-        minDist = dist;
-        minTime = t;
+    for(const id of activeSatIds){
+      let data = null;
+      if(!demoMode && LIVE_IDS.includes(id)){
+        data = await fetchSat(id);
       }
+      if(!data){
+        data = simulateSat(id);
+        if(LIVE_IDS.includes(id) && !anyLive) { /* will set demo */ }
+      } else { anyLive = true; }
+
+      if(!data) continue;
+      if(!satellites[id]) satellites[id] = { trail:[], orbit:[] };
+      const sat = satellites[id];
+      Object.assign(sat, { lat:data.latitude, lon:data.longitude, alt:data.altitude, velocity:data.velocity, footprint:data.footprint, visibility:data.visibility });
+      sat.trail.push([data.latitude, data.longitude]);
+      if(sat.trail.length > 90) sat.trail.shift();
+      computeOrbit(id);
+      updates[id] = { ...sat, id, catalog: SATELLITE_CATALOG[id] };
     }
-    return { etaMin: Math.round(minTime), distKm: Math.round(minDist) };
+
+    if(!anyLive && !demoMode){ demoMode=true; emit('status','demo'); }
+    else if(anyLive && !demoMode){ emit('status','live'); }
+
+    if(Object.keys(updates).length){
+      emit('update', { satellites: updates, pov: currentPOV, myLat, myLon });
+    }
+
+    // Pass predictions
+    if(myLat !== null){
+      const passes = computePasses();
+      emit('passes', passes);
+    }
   }
 
-  function haversine(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  function computeOrbit(id){
+    const cat = SATELLITE_CATALOG[id];
+    const sat = satellites[id];
+    if(!cat||!sat) return;
+    const orbit = [];
+    const lon = sat.lon||0;
+    const earthRotPerPeriod = (cat.period/(24*60))*360;
+    for(let i=0; i<=cat.period*2; i+=1.5){
+      const f = i/cat.period;
+      const oLat = cat.inc * Math.sin(f*2*Math.PI);
+      const oLon = ((lon + f*360 - f*earthRotPerPeriod*0.5)+540)%360-180;
+      orbit.push([oLat,oLon]);
+    }
+    sat.orbit = orbit;
   }
 
-  function start() {
-    fetch_iss();
-    timer = setInterval(fetch_iss, REFRESH_MS);
+  function computePasses(){
+    const passes = {};
+    for(const id of activeSatIds){
+      const sat = satellites[id];
+      const cat = SATELLITE_CATALOG[id];
+      if(!sat||!cat) continue;
+      const lon = sat.lon||0, lat = sat.lat||0;
+      let minDist=Infinity, minTime=0;
+      for(let t=0; t<=cat.period*2; t+=0.5){
+        const f = t/cat.period;
+        const fLat = cat.inc*Math.sin((demoAngles[id]||0)+f*2*Math.PI)*180/Math.PI;
+        const fLon = ((lon+f*360)+540)%360-180;
+        const d = haversine(myLat,myLon,fLat,fLon);
+        if(d<minDist){ minDist=d; minTime=t; }
+      }
+      passes[id] = { etaMin:Math.round(minTime), distKm:Math.round(minDist), satName:cat.short };
+    }
+    return passes;
   }
 
-  function stop() {
-    if (timer) clearInterval(timer);
+  function getOrbitProgress(id){
+    const cat = SATELLITE_CATALOG[id||25544];
+    if(!cat) return 0;
+    return ((Date.now()/1000)%(cat.period*60))/(cat.period*60);
   }
 
-  function getData() { return issData; }
-  function getTrail() { return trail; }
-  function getOrbit() { return orbit; }
-  function isDemoMode() { return useDemoMode; }
+  function getNearbyForMyLocation(lat, lon, radiusKm=3000){
+    const nearby = [];
+    for(const id of Object.keys(SATELLITE_CATALOG).map(Number)){
+      const sat = satellites[id];
+      if(!sat) continue;
+      const dist = haversine(lat,lon,sat.lat,sat.lon);
+      if(dist <= radiusKm) nearby.push({id, dist, ...sat, catalog:SATELLITE_CATALOG[id]});
+    }
+    return nearby.sort((a,b)=>a.dist-b.dist);
+  }
 
-  return { start, stop, on, getData, getTrail, getOrbit, getPassETA, getOrbitProgress, isDemoMode };
+  function haversine(a,b,c,d){
+    const R=6371,dL=(c-a)*Math.PI/180,dG=(d-b)*Math.PI/180;
+    const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dG/2)**2;
+    return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+  }
+
+  function start(){ tick(); timer=setInterval(tick,REFRESH_MS); }
+  function stop(){ clearInterval(timer); }
+  function getSatellites(){ return satellites; }
+  function isDemoMode(){ return demoMode; }
+  function getPOV(){ return currentPOV; }
+  function getPOVModes(){ return POV_MODES; }
+  function getPassETA(la,lo){ return computePasses(); }
+  function getData(){ return satellites[25544]||{}; }
+  function getOrbitProgressById(id){ return getOrbitProgress(id); }
+  function getNearby(lat,lon,r){ return getNearbyForMyLocation(lat,lon,r); }
+
+  return { start, stop, on, setPOV, setLocation, getSatellites, isDemoMode, getPOV, getPOVModes, getPassETA, getData, getOrbitProgress, getOrbitProgressById, getNearby, haversine };
 })();
