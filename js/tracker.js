@@ -164,10 +164,91 @@ window.Tracker = (function(){
   function setLocation(lat, lon) { myLat = lat; myLon = lon; }
   function setPOV(pov) { currentPOV = pov; }
   
-  // Dummy functions to satisfy existing app.js calls
-  function getOrbitProgressById(id) { return 0.5; } 
-  function getPassETA(lat, lon) { return { etaMin: 45, distKm: 850 }; }
-  function getSatellites() { return {}; } // Handled by emit now
+  // ── Heavy Orbital Math ──────────────────────────────────────
+
+  // 1. Orbit Progress Calculator
+  function getOrbitProgressById(id) {
+    const satrec = satrecs[id];
+    if(!satrec) return 0;
+    
+    // Get current time in Julian Date
+    const now = new Date();
+    const currentJd = (now.getTime() / 86400000.0) + 2440587.5;
+    
+    // Delta t (minutes since the TLE epoch)
+    const timeSinceEpochMins = (currentJd - satrec.jdsatepoch) * 1440.0;
+    
+    // M = (M0 + n * dt) % 2PI
+    let currentMeanAnomaly = (satrec.mo + satrec.no * timeSinceEpochMins) % (2 * Math.PI);
+    if (currentMeanAnomaly < 0) currentMeanAnomaly += 2 * Math.PI;
+    
+    // Return fraction of completion (0.0 to 1.0)
+    return currentMeanAnomaly / (2 * Math.PI);
+  }
+
+  // 2. Pass Prediction Engine
+  let cachedPasses = {};
+  let lastPassCalc = 0;
+
+  function getPassETA(lat, lon) {
+    const now = Date.now();
+    
+    // Throttle: Only recalculate heavy physics every 60 seconds
+    if (now - lastPassCalc < 60000 && Object.keys(cachedPasses).length > 0) {
+      const elapsedMins = (now - lastPassCalc) / 60000;
+      const updatedCache = {};
+      for(const [id, pass] of Object.entries(cachedPasses)) {
+         updatedCache[id] = { 
+           ...pass, 
+           etaMin: pass.etaMin === 999 ? 999 : Math.max(0, pass.etaMin - elapsedMins) 
+         };
+      }
+      return updatedCache;
+    }
+
+    lastPassCalc = now;
+    cachedPasses = {};
+    
+    const observerGd = {
+      longitude: satellite.degreesToRadians(lon),
+      latitude: satellite.degreesToRadians(lat),
+      height: 0.1 // Assume observer is roughly 100m above sea level
+    };
+
+    // Propagate forward to find the next overhead pass
+    for(const [id, satrec] of Object.entries(satrecs)) {
+       let foundPass = false;
+       
+       // Search up to 300 minutes (~3 orbits) into the future, checking every 2 minutes
+       for(let tOffset = 0; tOffset <= 300; tOffset += 2) {
+         const futureTime = new Date(now + tOffset * 60000);
+         const posVel = satellite.propagate(satrec, futureTime);
+         if(!posVel.position) continue;
+         
+         const gmst = satellite.gstime(futureTime);
+         const positionEcf = satellite.eciToEcf(posVel.position, gmst);
+         const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+         
+         const elevation = satellite.degreesLat(lookAngles.elevation);
+         
+         // Trigger criteria: If the satellite rises above 10 degrees
+         if(elevation > 10) {
+           const geo = satellite.eciToGeodetic(posVel.position, gmst);
+           const satLat = satellite.degreesLat(geo.latitude);
+           const satLon = satellite.degreesLong(geo.longitude);
+           const dist = haversine(lat, lon, satLat, satLon);
+           
+           cachedPasses[id] = { etaMin: tOffset, distKm: dist };
+           foundPass = true;
+           break; 
+         }
+       }
+       // If no pass found in the 300 min window, output default null values
+       if(!foundPass) cachedPasses[id] = { etaMin: 999, distKm: 9999 };
+    }
+    return cachedPasses;
+  }
+
 
   // Haversine formula
   function haversine(a,b,c,d) { 
