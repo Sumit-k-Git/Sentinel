@@ -248,3 +248,69 @@ function haversine(a,b,c,d){ const R=6371,dL=(c-a)*Math.PI/180,dG=(d-b)*Math.PI/
 
 document.addEventListener('DOMContentLoaded',boot);
 })();
+
+// ── Mode switcher UI helpers (appended) ───────────────────────────────────
+
+window.updateModeUI = function(mode) {
+  const btnLive = document.getElementById('mode-btn-live');
+  const btnCalc = document.getElementById('mode-btn-calculated');
+  const obsPanel= document.getElementById('obs-panel');
+  if(!btnLive||!btnCalc) return;
+  btnLive.classList.toggle('active', mode==='live');
+  btnCalc.classList.toggle('active', mode==='calculated');
+  btnCalc.classList.toggle('amber-mode', mode==='calculated');
+  obsPanel && obsPanel.classList.toggle('hidden', mode!=='calculated');
+  // Update telemetry
+  const tStream = document.getElementById('telem-stream');
+  if(tStream){
+    const d=document.createElement('div');
+    d.className='tl new';
+    d.textContent=mode==='calculated'
+      ? '▸ CALCULATED mode: SGP4 + SunCalc observability pipeline active.'
+      : '▸ LIVE API mode: wheretheiss.at polling active.';
+    tStream.appendChild(d);
+    tStream.scrollTop=tStream.scrollHeight;
+  }
+  // Broadcast to view.html
+  try{ const bc2=new BroadcastChannel('sentinel_ctrl'); bc2.postMessage({type:'mode',mode}); bc2.close(); }catch(e){}
+};
+
+// Patch onUpdate to also refresh observability panel
+const _origOnUpdate = window.__controlOnUpdate;
+Tracker.on('update', function(d) {
+  if(Tracker.getMode()!=='calculated') return;
+  const grid = document.getElementById('obs-grid');
+  if(!grid) return;
+  const rows = [];
+  for(const [idStr,sat] of Object.entries(d.satellites)){
+    const id  = parseInt(idStr);
+    const cat = SATELLITE_CATALOG[id];
+    const obs = sat.observability || PassNotifications.getConditions(id);
+    if(!cat) continue;
+    const elStr  = obs?.elevation!=null ? obs.elevation.toFixed(1)+'°' : '—';
+    const azStr  = obs?.azimuth!=null   ? obs.azimuth.toFixed(0)+'°'   : '';
+    const p = (ok, label) =>
+      `<span class="obs-pill ${ok===true?'ok':ok===false?'fail':'na'}">${label}</span>`;
+    rows.push(`
+      <div class="obs-row">
+        <span class="obs-emoji">${cat.emoji}</span>
+        <span class="obs-sat-name">${cat.short}</span>
+        <div class="obs-conditions">
+          ${p(obs?.aboveHorizon, 'EL>15°')}
+          ${p(obs?.groundDark,   'DARK')}
+          ${p(obs?.illuminated,  'LIT')}
+          ${p(obs?.visible,      obs?.visible?'VISIBLE':'—')}
+        </div>
+        <span class="obs-angle">${elStr}${azStr?' / '+azStr:''}</span>
+      </div>`);
+  }
+  grid.innerHTML = rows.join('');
+});
+
+// Restore saved mode
+(function(){
+  const savedMode = localStorage.getItem('sentinel_mode') || 'live';
+  if(savedMode !== 'live'){ Tracker.setMode(savedMode); updateModeUI(savedMode); }
+  document.getElementById('mode-btn-live')?.addEventListener('click', ()=> localStorage.setItem('sentinel_mode','live'));
+  document.getElementById('mode-btn-calculated')?.addEventListener('click', ()=> localStorage.setItem('sentinel_mode','calculated'));
+})();

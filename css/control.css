@@ -168,3 +168,48 @@ main{flex:1;overflow:hidden;display:grid;grid-template-columns:250px 1fr 250px;g
 .btn-glow:hover{background:rgba(0,255,229,0.1);box-shadow:0 0 18px rgba(0,255,229,0.11),inset 0 0 18px rgba(0,255,229,0.04);}
 .btn-glow.amber{border-color:rgba(255,170,0,0.28);color:var(--amber);background:rgba(255,170,0,0.04);}
 .btn-glow.amber:hover{background:rgba(255,170,0,0.09);box-shadow:0 0 16px rgba(255,170,0,0.1);}
+
+/* ── MODE SWITCHER ───────────────────────────── */
+.mode-switch-wrap{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
+.mode-btn{
+  background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);
+  border-radius:5px;padding:10px 8px;cursor:pointer;transition:all 0.2s;
+  display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--text-lo);
+  font-family:var(--body);
+}
+.mode-btn:hover{background:rgba(0,255,229,0.05);border-color:rgba(0,255,229,0.18);}
+.mode-btn.active{
+  background:rgba(0,255,229,0.08);border-color:rgba(0,255,229,0.35);
+  color:var(--iss);box-shadow:0 0 14px rgba(0,255,229,0.08);
+}
+.mode-btn.active.amber-mode{
+  background:rgba(255,170,0,0.08);border-color:rgba(255,170,0,0.35);
+  color:var(--amber);box-shadow:0 0 14px rgba(255,170,0,0.08);
+}
+.mode-icon{font-size:18px;line-height:1;}
+.mode-name{font-family:var(--hud);font-size:8.5px;letter-spacing:2px;font-weight:700;}
+.mode-desc{font-size:8px;color:var(--text-faint);letter-spacing:0.5px;text-align:center;}
+
+/* ── OBSERVABILITY PANEL ─────────────────────── */
+.obs-panel{
+  background:rgba(0,0,0,0.25);border:1px solid rgba(0,255,229,0.08);
+  border-radius:5px;padding:10px;margin-bottom:8px;
+}
+.obs-panel.hidden{display:none;}
+.obs-title{font-family:var(--hud);font-size:7px;letter-spacing:2.5px;color:var(--text-faint);margin-bottom:8px;}
+.obs-grid{display:flex;flex-direction:column;gap:5px;}
+.obs-row{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 8px;background:rgba(0,0,0,0.2);border-radius:3px;
+}
+.obs-emoji{font-size:12px;flex-shrink:0;}
+.obs-sat-name{font-size:9px;font-weight:700;color:var(--text-mid);width:55px;flex-shrink:0;}
+.obs-conditions{display:flex;gap:5px;flex:1;flex-wrap:wrap;}
+.obs-pill{
+  font-size:7.5px;letter-spacing:1px;padding:2px 6px;border-radius:2px;
+  font-family:var(--hud);white-space:nowrap;
+}
+.obs-pill.ok  {color:#00ffe5;background:rgba(0,255,229,0.07);border:1px solid rgba(0,255,229,0.18);}
+.obs-pill.fail{color:rgba(100,140,170,0.5);background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);}
+.obs-pill.na  {color:rgba(80,120,150,0.5);background:transparent;border:none;}
+.obs-angle{font-size:9px;color:var(--glow-amber,#ffaa00);margin-left:auto;white-space:nowrap;}
