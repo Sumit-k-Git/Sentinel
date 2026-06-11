@@ -12,19 +12,22 @@
 <link rel="stylesheet" href="css/control.css"/>
 </head>
 <body>
+
+<!-- Boot -->
 <div id="boot">
   <div class="boot-hex">⬡</div>
   <div class="boot-title">SUB-ORBITAL SENTINEL</div>
   <div class="boot-lines">
-    <div class="bl" id="bl1">▸ Initializing orbital engine...</div>
-    <div class="bl" id="bl2">▸ Loading satellite catalog (10 objects)...</div>
-    <div class="bl" id="bl3">▸ Calibrating star renderer...</div>
-    <div class="bl" id="bl4">▸ Acquiring ISS signal lock...</div>
+    <div class="bl" id="bl1">▸ Initializing multi-source API layer…</div>
+    <div class="bl" id="bl2">▸ Pre-warming CelesTrak TLE cache…</div>
+    <div class="bl" id="bl3">▸ Loading satellite.js SGP4 engine…</div>
+    <div class="bl" id="bl4">▸ Acquiring live position data…</div>
   </div>
   <div class="boot-bar-wrap"><div class="boot-bar-fill" id="bfill"></div></div>
-  <div class="boot-ver">v3.0 · MULTI-SAT · SENTINEL CONTROL</div>
+  <div class="boot-ver">v5.0 · MULTI-SOURCE LIVE · SENTINEL CONTROL</div>
 </div>
 
+<!-- App -->
 <div id="app" class="hidden">
   <header>
     <div class="h-left">
@@ -38,14 +41,10 @@
           <rect x="28" y="17.8" width="9" height="2.5" rx="0.3" fill="rgba(0,255,229,0.45)"/>
           <rect x="28" y="21.7" width="9" height="2.5" rx="0.3" fill="rgba(0,255,229,0.45)"/>
           <line x1="5" y1="21" x2="37" y2="21" stroke="rgba(0,255,229,0.5)" stroke-width="0.6"/>
-          <circle cx="21" cy="4" r="1.5" fill="rgba(0,255,229,0.25)"/>
-          <circle cx="38" cy="21" r="1.5" fill="rgba(0,255,229,0.15)"/>
-          <circle cx="21" cy="38" r="1.5" fill="rgba(0,255,229,0.15)"/>
-          <circle cx="4" cy="21" r="1.5" fill="rgba(0,255,229,0.15)"/>
         </svg>
         <div>
           <div class="h-title">SUB-ORBITAL SENTINEL</div>
-          <div class="h-sub">MISSION CONTROL · v3 MULTI-SAT</div>
+          <div class="h-sub">MISSION CONTROL · v5 MULTI-SOURCE</div>
         </div>
       </div>
     </div>
@@ -64,11 +63,16 @@
   <main>
     <!-- COL 1 -->
     <div class="col">
-      <!-- Primary Sat Card -->
       <div class="card glow-card">
-        <div class="card-header"><span class="card-label">FOCUSED SATELLITE</span><span class="card-badge live" id="iss-live-badge">● LIVE</span></div>
+        <div class="card-header">
+          <span class="card-label">FOCUSED SATELLITE</span>
+          <div style="display:flex;gap:5px;align-items:center">
+            <span class="tle-badge fresh" id="tle-age-badge" style="display:none">TLE</span>
+            <span class="card-badge live" id="iss-live-badge">● LIVE</span>
+          </div>
+        </div>
         <div class="iss-hero">
-          <svg id="hero-svg" class="iss-hero-svg" viewBox="0 0 120 60" fill="none">
+          <svg class="iss-hero-svg" viewBox="0 0 120 60" fill="none">
             <line x1="10" y1="30" x2="110" y2="30" stroke="rgba(0,255,229,0.5)" stroke-width="1.2"/>
             <rect x="46" y="22" width="28" height="16" rx="2" fill="rgba(0,255,229,0.08)" stroke="rgba(0,255,229,0.4)" stroke-width="0.8"/>
             <rect x="52" y="18" width="16" height="6" rx="1.5" fill="rgba(0,255,229,0.06)" stroke="rgba(0,255,229,0.25)" stroke-width="0.6"/>
@@ -81,6 +85,7 @@
           </svg>
         </div>
         <div class="iss-norad" id="hero-norad">NORAD 25544 · ISS (ZARYA)</div>
+        <div style="text-align:center;margin-bottom:6px"><span class="src-source-badge" id="source-badge">—</span></div>
         <div class="data-grid-2">
           <div class="dg-item"><div class="dg-label">LATITUDE</div><div class="dg-val green" id="d-lat">—</div></div>
           <div class="dg-item"><div class="dg-label">LONGITUDE</div><div class="dg-val green" id="d-lon">—</div></div>
@@ -94,8 +99,6 @@
           <div class="orbit-bar-track"><div class="orbit-bar-fill" id="d-orb-fill"></div></div>
         </div>
       </div>
-
-      <!-- Pass prediction -->
       <div class="card">
         <div class="card-header"><span class="card-label">NEXT PASS OVER YOU</span></div>
         <div class="pass-big" id="p-eta">—</div>
@@ -106,23 +109,16 @@
 
     <!-- COL 2 -->
     <div class="col col-mid">
-      <!-- POV Switcher -->
+      <!-- POV switcher -->
       <div class="card pov-card">
-        <div class="card-header"><span class="card-label">POINT OF VIEW</span><span class="card-badge" style="color:rgba(192,132,252,0.8);border-color:rgba(192,132,252,0.2)">10 SATELLITES</span></div>
-        <div class="pov-grid" id="pov-grid">
-          <!-- populated by JS -->
-        </div>
+        <div class="card-header"><span class="card-label">POINT OF VIEW</span></div>
+        <div class="pov-grid" id="pov-grid"></div>
       </div>
-
       <!-- Mini map -->
       <div class="card map-card">
-        <div class="card-header"><span class="card-label">ORBITAL TRACK</span><span class="map-mode">LIVE</span></div>
-        <div class="map-wrap">
-          <canvas id="mini-map"></canvas>
-          <div id="map-tip" class="map-tip hidden"></div>
-        </div>
+        <div class="card-header"><span class="card-label">ORBITAL TRACK</span><span class="map-mode">LIVE · ALL SATS</span></div>
+        <div class="map-wrap"><canvas id="mini-map"></canvas><div id="map-tip" class="map-tip hidden"></div></div>
       </div>
-
       <!-- Telemetry -->
       <div class="card">
         <div class="card-header"><span class="card-label">TELEMETRY STREAM</span></div>
@@ -136,48 +132,76 @@
       <div class="card">
         <div class="card-header"><span class="card-label">GROUND STATION</span></div>
         <div class="loc-icon-row">
-          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-            <circle cx="15" cy="15" r="13" stroke="rgba(255,170,0,0.2)" stroke-width="1"/>
-            <line x1="15" y1="3" x2="15" y2="27" stroke="rgba(255,170,0,0.2)" stroke-width="0.7"/>
-            <line x1="3" y1="15" x2="27" y2="15" stroke="rgba(255,170,0,0.2)" stroke-width="0.7"/>
-            <circle cx="15" cy="15" r="3" fill="rgba(255,170,0,0.7)"/>
-          </svg>
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none"><circle cx="15" cy="15" r="13" stroke="rgba(255,170,0,0.2)" stroke-width="1"/><line x1="15" y1="3" x2="15" y2="27" stroke="rgba(255,170,0,0.2)" stroke-width="0.7"/><line x1="3" y1="15" x2="27" y2="15" stroke="rgba(255,170,0,0.2)" stroke-width="0.7"/><circle cx="15" cy="15" r="3" fill="rgba(255,170,0,0.7)"/></svg>
           <div id="loc-info" class="loc-unset">Location not set</div>
         </div>
         <button id="btn-locate" class="btn-glow">⊕ ACQUIRE LOCATION</button>
         <div id="loc-err" class="loc-err hidden"></div>
-        <div class="loc-note">Stored locally. Never sent anywhere.</div>
+        <div class="loc-note">Stored locally · never sent to any server</div>
       </div>
 
-      <!-- Feature Toggles -->
+      <!-- Tracking Engine -->
       <div class="card">
-        <div class="card-header"><span class="card-label">FEATURES</span></div>
-        <div class="feature-list">
-          <div class="feature-row">
-            <div class="feature-info">
-              <div class="feature-name">🔊 Ambient Audio</div>
-              <div class="feature-desc">Generative drone that shifts with orbital data</div>
-            </div>
-            <label class="toggle-switch"><input type="checkbox" id="tog-audio"/><span class="ts-slider"></span></label>
-          </div>
-          <div class="feature-row">
-            <div class="feature-info">
-              <div class="feature-name">🔔 Pass Notifications</div>
-              <div class="feature-desc">Alert when satellite is overhead</div>
-            </div>
-            <label class="toggle-switch"><input type="checkbox" id="tog-notify"/><span class="ts-slider"></span></label>
-          </div>
-          <div class="feature-row">
-            <div class="feature-info">
-              <div class="feature-name">☁ Cloud Cover</div>
-              <div class="feature-desc">Live weather overlay (Open-Meteo)</div>
-            </div>
-            <label class="toggle-switch"><input type="checkbox" id="tog-weather"/><span class="ts-slider"></span></label>
-          </div>
+        <div class="card-header"><span class="card-label">TRACKING ENGINE</span></div>
+        <div class="mode-switch-wrap">
+          <button class="mode-btn active" data-mode="live">
+            <span class="mode-icon">📡</span>
+            <span class="mode-name">LIVE API</span>
+            <span class="mode-desc">wheretheiss + CelesTrak</span>
+          </button>
+          <button class="mode-btn" data-mode="calculated">
+            <span class="mode-icon">⚛</span>
+            <span class="mode-name">CALCULATED</span>
+            <span class="mode-desc">SGP4 · strict TLE</span>
+          </button>
+          <button class="mode-btn" data-mode="demo">
+            <span class="mode-icon">🎮</span>
+            <span class="mode-name">DEMO</span>
+            <span class="mode-desc">Simulation only</span>
+          </button>
+        </div>
+        <div id="demo-warning" class="demo-warn hidden">⚠ DEMO MODE — positions are simulated, not real.</div>
+        <div class="divider"></div>
+
+        <!-- N2YO optional key -->
+        <div id="n2yo-panel">
+          <div class="card-label" style="margin-bottom:6px">N2YO API KEY (OPTIONAL)</div>
+          <input type="text" id="n2yo-key-input" class="key-input" placeholder="Paste your free N2YO key…" autocomplete="off" spellcheck="false"/>
+          <div class="loc-note">Free key at <b>n2yo.com/api</b> · upgrades non-ISS satellites to direct API. Without a key, CelesTrak TLE propagation is used.</div>
         </div>
 
         <div class="divider"></div>
-        <div class="card-label" style="margin-bottom:10px">VIEW LAYERS</div>
+        <!-- Observability (Calculated only) -->
+        <div id="obs-panel" class="obs-panel hidden">
+          <div class="obs-title">OBSERVABILITY ENGINE</div>
+          <div id="obs-grid" class="obs-grid"></div>
+        </div>
+
+        <!-- TLE Health (Calculated only) -->
+        <div id="tle-health" class="tle-health-panel hidden">
+          <div class="card-label" style="margin-bottom:6px">TLE HEALTH</div>
+          <div id="tle-panel"></div>
+        </div>
+      </div>
+
+      <!-- Source status -->
+      <div class="card" id="src-panel">
+        <div class="card-header"><span class="card-label">DATA SOURCES · ALL SATELLITES</span></div>
+        <div id="source-status-panel" class="source-status-panel">
+          <div style="font-size:9px;color:var(--text-faint);font-style:italic">Waiting for first update…</div>
+        </div>
+      </div>
+
+      <!-- Features -->
+      <div class="card">
+        <div class="card-header"><span class="card-label">FEATURES</span></div>
+        <div class="feature-list">
+          <div class="feature-row"><div class="feature-info"><div class="feature-name">🔊 Ambient Audio</div><div class="feature-desc">Generative drone · orbital-reactive</div></div><label class="toggle-switch"><input type="checkbox" id="tog-audio"/><span class="ts-slider"></span></label></div>
+          <div class="feature-row"><div class="feature-info"><div class="feature-name">🔔 Pass Notifications</div><div class="feature-desc">Overhead alert · 3-gate in calc mode</div></div><label class="toggle-switch"><input type="checkbox" id="tog-notify"/><span class="ts-slider"></span></label></div>
+          <div class="feature-row"><div class="feature-info"><div class="feature-name">☁ Cloud Cover</div><div class="feature-desc">Open-Meteo weather overlay</div></div><label class="toggle-switch"><input type="checkbox" id="tog-weather"/><span class="ts-slider"></span></label></div>
+        </div>
+        <div class="divider"></div>
+        <div class="card-label" style="margin-bottom:8px">VIEW LAYERS</div>
         <div class="ctrl-list">
           <label class="ctrl-row"><input type="checkbox" id="t-stars" checked/><span class="ctrl-name">Stars</span><span class="ctrl-desc">Background field</span></label>
           <label class="ctrl-row"><input type="checkbox" id="t-const" checked/><span class="ctrl-name">Constellations</span><span class="ctrl-desc">Vector lines</span></label>
@@ -195,48 +219,28 @@
       <!-- API / PWA -->
       <div class="card">
         <div class="card-header"><span class="card-label">DATA &amp; APP</span></div>
-        <div class="api-row"><div class="api-status-dot" id="api-dot"></div><div><div class="api-name">wheretheiss.at</div><div class="api-url">NORAD TLE · 5s refresh</div></div></div>
-        <div class="api-detail" id="api-mode-label">connecting...</div>
-        
+        <div class="api-row"><div class="api-status-dot" id="api-dot"></div><div><div class="api-name">Multi-source pipeline</div><div class="api-url">wheretheiss.at · open-notify · CelesTrak · N2YO</div></div></div>
+        <div class="api-detail" id="api-mode-label">Connecting…</div>
         <div class="divider"></div>
-        <div class="card-label" style="margin-bottom:10px">TRACKING ENGINE</div>
-        <div class="mode-switch-wrap" id="mode-switch-wrap">
-          <button class="mode-btn active" id="mode-btn-live" onclick="Tracker.setMode('live');updateModeUI('live')">
-            <span class="mode-icon">📡</span>
-            <span class="mode-name">LIVE API</span>
-            <span class="mode-desc">wheretheiss.at polling</span>
-          </button>
-          <button class="mode-btn" id="mode-btn-calculated" onclick="Tracker.setMode('calculated');updateModeUI('calculated')">
-            <span class="mode-icon">⚛</span>
-            <span class="mode-name">CALCULATED</span>
-            <span class="mode-desc">SGP4 · TLE · SunCalc</span>
-          </button>
-        </div>
-        <div id="obs-panel" class="obs-panel hidden">
-          <div class="obs-title">OBSERVABILITY ENGINE</div>
-          <div id="obs-grid" class="obs-grid">
-            <!-- populated by JS -->
-          </div>
-        </div>
-        <div class="divider"></div>
-        <button class="btn-glow" id="btn-install" style="display:none">📲 INSTALL AS APP (PWA)</button>
-        <div id="install-note" class="loc-note">Open in Chrome/Edge and use "Add to Home Screen" to install as a standalone app.</div>
+        <button class="btn-glow" id="btn-install" style="display:none">📲 INSTALL AS APP</button>
+        <div id="install-note" class="loc-note">Add to Home Screen in Chrome/Edge for PWA install.</div>
       </div>
     </div>
   </main>
 </div>
 
-<!-- Physics libraries -->
+<!-- Physics + app scripts -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.1.3/satellite.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="js/satellites.js"></script>
 <script src="js/stars.js"></script>
 <script src="js/renderer.js"></script>
+<script src="js/api-layer.js"></script>
 <script src="js/tracker.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/weather.js"></script>
 <script src="js/notifications.js"></script>
 <script src="js/control.js"></script>
-<script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 </body>
 </html>
