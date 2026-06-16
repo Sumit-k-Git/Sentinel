@@ -386,6 +386,14 @@
         addTelem(n2yoInput.value.trim() ? 'N2YO key set.' : 'N2YO key cleared.', 'new');
       });
     }
+    /* N2YO proxy URL */
+    var n2yoProxy = $('n2yo-proxy-input');
+    if (n2yoProxy) {
+      n2yoProxy.addEventListener('change', function() {
+        ApiLayer.setN2YOProxy(n2yoProxy.value.trim() || null);
+        addTelem(n2yoProxy.value.trim() ? 'N2YO proxy set: ' + n2yoProxy.value.trim() : 'N2YO proxy cleared.', 'new');
+      });
+    }
 
     /* Feature toggles */
     var togAudio = $('tog-audio');

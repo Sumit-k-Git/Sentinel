@@ -168,9 +168,15 @@
 
         <!-- N2YO optional key -->
         <div id="n2yo-panel">
-          <div class="card-label" style="margin-bottom:6px">N2YO API KEY (OPTIONAL)</div>
-          <input type="text" id="n2yo-key-input" class="key-input" placeholder="Free key from n2yo.com/api"/>
-          <div class="loc-note">Upgrades non-ISS sats to direct API. Without it, CelesTrak TLE SGP4 is used.</div>
+          <div class="card-label" style="margin-bottom:6px">N2YO API (OPTIONAL — REQUIRES PROXY)</div>
+          <input type="text" id="n2yo-key-input" class="key-input" placeholder="Free key from n2yo.com/api" style="margin-bottom:6px"/>
+          <input type="text" id="n2yo-proxy-input" class="key-input" placeholder="CORS proxy URL e.g. http://localhost:8010"/>
+          <div class="loc-note" style="margin-top:6px">
+            N2YO is CORS-blocked in browsers. Start a local proxy:<br>
+            <code style="color:var(--iss);font-size:8px">npx local-cors-proxy --proxyUrl https://api.n2yo.com --port 8010</code><br>
+            Then enter <code style="color:var(--iss);font-size:8px">http://localhost:8010</code> above.<br>
+            Without proxy, CelesTrak TLE+SGP4 is used (no key needed).
+          </div>
         </div>
 
         <div class="divider"></div>

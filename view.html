@@ -202,220 +202,157 @@ html,body{width:100%;height:100%;background:#000208;overflow:hidden;font-family:
 <script src="js/audio.js"></script>
 <script src="js/weather.js"></script>
 <script src="js/notifications.js"></script>
+<script src="js/api-layer.js"></script>
 <script>
 (function(){
-  const canvas=document.getElementById('canvas-full');
+  'use strict';
+  var canvas = document.getElementById('canvas-full');
   RendererView.init(canvas);
-  StarField.generate(window.innerWidth,window.innerHeight,900);
+  StarField.generate(window.innerWidth, window.innerHeight, 900);
 
-  let myLat=null,myLon=null,currentPOV='my_location';
-  let t0=performance.now();
-  let prevOverhead={};
+  var myLat = null, myLon = null, currentPOV = 'my_location';
+  var t0 = performance.now();
 
-  // ISS SVG templates per satellite type
-  const SAT_SVGS={
-    default:`<rect x="15" y="18" width="10" height="4" rx="0.5" fill="currentColor" opacity="0.9"/>
-      <rect x="3" y="16.5" width="10" height="3" rx="0.5" fill="currentColor" opacity="0.5"/>
-      <rect x="3" y="20.5" width="10" height="3" rx="0.5" fill="currentColor" opacity="0.5"/>
-      <rect x="27" y="16.5" width="10" height="3" rx="0.5" fill="currentColor" opacity="0.5"/>
-      <rect x="27" y="20.5" width="10" height="3" rx="0.5" fill="currentColor" opacity="0.5"/>
-      <line x1="3" y1="20" x2="37" y2="20" stroke="currentColor" stroke-width="0.8" opacity="0.6"/>`,
-    telescope:`<circle cx="20" cy="20" r="8" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.7"/>
-      <circle cx="20" cy="20" r="3" fill="currentColor" opacity="0.9"/>
-      <line x1="20" y1="4" x2="20" y2="12" stroke="currentColor" stroke-width="1.5" opacity="0.6"/>
-      <line x1="20" y1="28" x2="20" y2="36" stroke="currentColor" stroke-width="1.5" opacity="0.6"/>
-      <rect x="4" y="18" width="8" height="4" rx="1" fill="currentColor" opacity="0.4"/>
-      <rect x="28" y="18" width="8" height="4" rx="1" fill="currentColor" opacity="0.4"/>`,
-    weather:`<circle cx="20" cy="18" r="9" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.7"/>
-      <line x1="4" y1="20" x2="36" y2="20" stroke="currentColor" stroke-width="0.7" stroke-dasharray="2 3" opacity="0.4"/>
-      <circle cx="20" cy="18" r="3" fill="currentColor" opacity="0.8"/>
-      <path d="M8 28 Q14 24 20 28 Q26 32 32 28" stroke="currentColor" stroke-width="1" fill="none" opacity="0.4"/>`,
-    starlink:`<circle cx="20" cy="20" r="2" fill="currentColor" opacity="0.9"/>
-      <rect x="4" y="19" width="32" height="2" rx="1" fill="currentColor" opacity="0.5"/>
-      <circle cx="8" cy="20" r="1.5" fill="currentColor" opacity="0.6"/>
-      <circle cx="14" cy="20" r="1.5" fill="currentColor" opacity="0.6"/>
-      <circle cx="26" cy="20" r="1.5" fill="currentColor" opacity="0.6"/>
-      <circle cx="32" cy="20" r="1.5" fill="currentColor" opacity="0.6"/>`,
-    location:`<circle cx="20" cy="20" r="14" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"/>
-      <circle cx="20" cy="20" r="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
-      <line x1="20" y1="6" x2="20" y2="34" stroke="currentColor" stroke-width="0.8" opacity="0.4"/>
-      <line x1="6" y1="20" x2="34" y2="20" stroke="currentColor" stroke-width="0.8" opacity="0.4"/>
-      <circle cx="20" cy="20" r="3" fill="currentColor" opacity="0.9"/>`
-  };
+  /* Restore saved location and POV */
+  try {
+    var loc = JSON.parse(localStorage.getItem('sentinel_loc') || 'null');
+    if (loc) { myLat=loc.lat; myLon=loc.lon; RendererView.setMyLocation(myLat,myLon); Tracker.setLocation(myLat,myLon); }
+    currentPOV = localStorage.getItem('sentinel_pov') || 'my_location';
+    RendererView.setPOV(currentPOV);
+    Tracker.setPOV(currentPOV);
+  } catch(e) {}
 
-  function getSatTemplate(id){
-    const id_=parseInt(id);
-    if(id_===20580) return 'telescope';
-    if([43205,25338,28654,27424,39084].includes(id_)) return 'weather';
-    if([44713,44914].includes(id_)) return 'starlink';
-    return 'default';
-  }
-
-  function updatePOVBadge(pov, satellites){
-    const svg=document.getElementById('pov-svg');
-    const nameEl=document.getElementById('pov-name');
-    const modeEl=document.getElementById('pov-mode-label');
-
-    if(pov==='my_location'){
-      svg.innerHTML=SAT_SVGS.location;
-      svg.style.color='#ffaa00';
-      document.getElementById('pov-icon').style.setProperty('--sat-color','#ffaa00');
-      nameEl.textContent='MY LOCATION';
-      nameEl.style.color='#ffaa00';
-      nameEl.style.textShadow='0 0 12px #ffaa00';
-      modeEl.textContent='POV: GROUND STATION';
-    } else if(pov==='global'){
-      svg.innerHTML=SAT_SVGS.location;
-      svg.style.color='#c084fc';
-      nameEl.textContent='GLOBAL VIEW';
-      nameEl.style.color='#c084fc';
-      nameEl.style.textShadow='0 0 12px #c084fc';
-      modeEl.textContent='POV: ALL SATELLITES';
-    } else {
-      const id=parseInt(pov);
-      const cat=SATELLITE_CATALOG[id];
-      if(!cat) return;
-      svg.innerHTML=SAT_SVGS[getSatTemplate(id)];
-      svg.style.color=cat.color;
-      nameEl.textContent=cat.name;
-      nameEl.style.color=cat.color;
-      nameEl.style.textShadow=`0 0 12px ${cat.color}`;
-      modeEl.textContent=`POV: SATELLITE TRACK`;
-    }
-  }
-
-  function updateHUD(satellites, pov){
-    // Primary data — show focused sat or ISS
-    const focusId = (pov==='my_location'||pov==='global') ? 25544 : parseInt(pov);
-    const sat = satellites[focusId];
-    const cat = SATELLITE_CATALOG[focusId];
-
-    if(sat&&sat.lat!==undefined){
-      setText('v-lat', fmtCoord(sat.lat,'N','S'));
-      setText('v-lon', fmtCoord(sat.lon,'E','W'));
-      setText('v-alt', `${sat.alt?sat.alt.toFixed(1):'—'}<span class="chip-unit">km</span>`);
-      setText('v-vel', `${sat.velocity?(sat.velocity/1000).toFixed(2):'—'}<span class="chip-unit">km/s</span>`);
-      setText('v-foot', `${sat.footprint?Math.round(sat.footprint):'—'}<span class="chip-unit">km</span>`);
-      setText('v-vis', (sat.visibility||'—').toUpperCase());
-      if(cat) document.getElementById('v-inc').textContent=cat.inc+'°';
-    }
-
-    // POV mode label in bottom bar
-    const povLabels={'my_location':'MY LOCATION','global':'GLOBAL'};
-    document.getElementById('v-pov-mode').textContent=povLabels[pov]||(SATELLITE_CATALOG[parseInt(pov)]?.short||pov);
-    document.getElementById('v-sat-count').textContent=Object.keys(satellites).length+' SAT';
-
-    // Nearby list (my_location POV)
-    const nearbyEl=document.getElementById('nearby-list');
-    const stripR=document.getElementById('strip-right');
-    if(pov==='my_location'&&myLat!==null){
-      nearbyEl.style.display='flex';
-      stripR.style.display='none';
-      renderNearbyList(satellites);
-    } else {
-      nearbyEl.style.display='none';
-      stripR.style.display='flex';
-    }
-
-    // Overhead alert
-    checkOverheadAlert(satellites);
-  }
-
-  function renderNearbyList(satellites){
-    const el=document.getElementById('nearby-list');
-    const nearby=[];
-    for(const [idStr,sat] of Object.entries(satellites)){
-      if(!sat.lat&&sat.lat!==0) continue;
-      const cat=SATELLITE_CATALOG[parseInt(idStr)];
-      if(!cat) continue;
-      const dist=haversine(myLat,myLon,sat.lat,sat.lon);
-      nearby.push({cat,sat,dist});
-    }
-    nearby.sort((a,b)=>a.dist-b.dist);
-    el.innerHTML=nearby.slice(0,6).map(({cat,sat,dist})=>`
-      <div class="nearby-item">
-        <div class="nearby-dot" style="background:${cat.color};box-shadow:0 0 5px ${cat.color}"></div>
-        <div class="nearby-info">
-          <div class="nearby-name">${cat.emoji} ${cat.short}</div>
-          <div class="nearby-dist">${Math.round(dist).toLocaleString()} km away</div>
-        </div>
-      </div>`).join('');
-  }
-
-  function checkOverheadAlert(satellites){
-    const alert=document.getElementById('overhead-alert');
-    let anyOverhead=false;
-    for(const [idStr,sat] of Object.entries(satellites)){
-      if(!sat.lat&&sat.lat!==0) continue;
-      if(myLat===null) break;
-      const dist=haversine(myLat,myLon,sat.lat,sat.lon);
-      const cat=SATELLITE_CATALOG[parseInt(idStr)];
-      if(dist<900&&cat){
-        document.getElementById('oa-name').textContent=`⚡ ${cat.short} OVERHEAD`;
-        document.getElementById('oa-sub').textContent=`${Math.round(dist)} km away · Alt ${cat.alt} km`;
-        anyOverhead=true; break;
+  /* BroadcastChannel from control panel */
+  try {
+    var bc = new BroadcastChannel('sentinel_ctrl');
+    bc.onmessage = function(e) {
+      var d = e.data;
+      if (!d) return;
+      if (d.type === 'location') {
+        myLat = d.lat; myLon = d.lon;
+        RendererView.setMyLocation(myLat, myLon);
+        Tracker.setLocation(myLat, myLon);
+        if (d.weatherEnabled && window.WeatherLayer) WeatherLayer.enable(myLat, myLon);
       }
-    }
-    alert.classList.toggle('show', anyOverhead);
-  }
-
-  // Clock
-  setInterval(()=>{
-    const n=new Date();
-    document.getElementById('hud-clock').textContent=[n.getUTCHours(),n.getUTCMinutes(),n.getUTCSeconds()].map(v=>String(v).padStart(2,'0')).join(':')+' UTC';
-  },1000);
-
-  // BroadcastChannel from control panel
-  try{
-    const bc=new BroadcastChannel('sentinel_ctrl');
-    bc.onmessage=e=>{
-      const d=e.data;
-      if(d.type==='location'){ myLat=d.lat; myLon=d.lon; RendererView.setMyLocation(myLat,myLon); Tracker.setLocation(myLat,myLon); if(d.weatherEnabled) WeatherLayer.enable(myLat,myLon); }
-      if(d.type==='opts') RendererView.setOpts(d.opts);
-      if(d.type==='pov'){ currentPOV=d.pov; RendererView.setPOV(d.pov); Tracker.setPOV(d.pov); updatePOVBadge(d.pov,{}); }
-      if(d.type==='brightness') document.body.style.filter=`brightness(${d.value})`;
-      if(d.type==='audio'){ d.enabled?AudioEngine.enable():AudioEngine.disable(); }
-      if(d.type==='weather'){ d.enabled?WeatherLayer.enable(myLat,myLon):WeatherLayer.disable(); }
-      if(d.type==='notify'){ d.enabled?PassNotifications.enable():PassNotifications.disable(); }
-      if(d.type==='mode'){ Tracker.setMode(d.mode); }
+      if (d.type === 'opts')       RendererView.setOpts(d.opts);
+      if (d.type === 'pov')        { currentPOV=d.pov; RendererView.setPOV(d.pov); Tracker.setPOV(d.pov); }
+      if (d.type === 'brightness') document.body.style.filter = 'brightness(' + d.value + ')';
+      if (d.type === 'audio'    && window.AudioEngine)     { d.enabled ? AudioEngine.enable() : AudioEngine.disable(); }
+      if (d.type === 'weather'  && window.WeatherLayer)    { d.enabled ? WeatherLayer.enable(myLat,myLon) : WeatherLayer.disable(); }
+      if (d.type === 'notify'   && window.PassNotifications){ d.enabled ? PassNotifications.enable() : PassNotifications.disable(); }
+      if (d.type === 'mode')       Tracker.setMode(d.mode);
+      if (d.type === 'ceiling')    document.body.style.transform = d.enabled ? 'rotate(180deg)' : '';
     };
-  }catch(e){}
+  } catch(e) {}
 
-  // Restore saved state
-  try{
-    const loc=JSON.parse(localStorage.getItem('sentinel_loc')||'null');
-    if(loc){ myLat=loc.lat; myLon=loc.lon; RendererView.setMyLocation(myLat,myLon); Tracker.setLocation(myLat,myLon); }
-    const pov=localStorage.getItem('sentinel_pov')||'my_location';
-    currentPOV=pov; RendererView.setPOV(pov); Tracker.setPOV(pov);
-  }catch(e){}
-
-  Tracker.on('update',d=>{
+  /* Tracker events */
+  Tracker.on('update', function(d) {
     RendererView.setSatellites(d.satellites);
-    updateHUD(d.satellites, currentPOV);
-    updatePOVBadge(currentPOV, d.satellites);
-    AudioEngine.updateState({ altitude: d.satellites[25544]?.alt||408, distKm: myLat!==null?haversine(myLat,myLon,d.satellites[25544]?.lat||0,d.satellites[25544]?.lon||0):9999, overhead:false });
-    PassNotifications.checkPasses(d.satellites, myLat, myLon);
+    updateHUD(d.satellites, d.mode);
+    if (window.PassNotifications) PassNotifications.checkPasses(d.satellites, myLat, myLon);
+    var iss = d.satellites[25544];
+    if (iss && !iss.offline && iss.lat !== undefined && window.AudioEngine) {
+      AudioEngine.updateState({ altitude: iss.alt||408, distKm: myLat!==null ? Tracker.haversine(myLat,myLon,iss.lat,iss.lon) : 9999, overhead:false });
+    }
   });
 
-  Tracker.on('status',s=>{
-    const dot=document.getElementById('v-sigdot');
-    const lbl=document.getElementById('v-siglab');
-    const sdot=document.getElementById('v-status-dot');
-    if(s==='live'){ dot.style.background='#00ffe5'; dot.style.boxShadow='0 0 8px #00ffe5'; lbl.textContent='LIVE'; sdot.style.background='#00ffe5'; sdot.style.boxShadow='0 0 8px #00ffe5'; document.getElementById('v-status').textContent='LIVE'; }
-    else { dot.style.background='#ffaa00'; lbl.textContent='DEMO'; sdot.style.background='#ffaa00'; document.getElementById('v-status').textContent='DEMO'; }
+  Tracker.on('status', function(s) {
+    var dot = document.getElementById('v-sigdot');
+    var lbl = document.getElementById('v-siglab');
+    var sdot = document.getElementById('v-status-dot');
+    var stxt = document.getElementById('v-status');
+    var colors = { live:'#00ffe5', calculated:'#ffaa00', demo:'#ff4d6d', data_unavailable:'#ff4d6d' };
+    var col = colors[s] || '#1e3d56';
+    if (dot)  { dot.style.background  = col; dot.style.boxShadow = '0 0 8px '+col; }
+    if (sdot) { sdot.style.background = col; sdot.style.boxShadow = '0 0 8px '+col; }
+    if (lbl)  lbl.textContent  = s.toUpperCase().replace('_',' ');
+    if (stxt) stxt.textContent = s.toUpperCase().replace('_',' ');
   });
 
-  Tracker.setPOV(currentPOV);
   Tracker.start();
 
-  window.addEventListener('resize',()=>{ RendererView.resize(); StarField.generate(window.innerWidth,window.innerHeight,900); });
+  /* UTC clock */
+  setInterval(function() {
+    var el = document.getElementById('hud-clock');
+    if (el) el.textContent = new Date().toUTCString().slice(17,25) + ' UTC';
+  }, 1000);
 
-  function loop(ts){ RendererView.draw(ts-t0); requestAnimationFrame(loop); }
+  window.addEventListener('resize', function() {
+    RendererView.resize();
+    StarField.generate(window.innerWidth, window.innerHeight, 900);
+  });
+
+  function loop(ts) { RendererView.draw(ts - t0); requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
 
-  function setText(id,html){ const el=document.getElementById(id); if(el) el.innerHTML=html; }
-  function fmtCoord(v,p,n){ return `${Math.abs(v).toFixed(3)}° ${v>=0?p:n}`; }
-  function haversine(a,b,c,d){ const R=6371,dL=(c-a)*Math.PI/180,dG=(d-b)*Math.PI/180; const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dG/2)**2; return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)); }
+  function updateHUD(sats, mode) {
+    var focusId = (currentPOV==='my_location'||currentPOV==='global') ? 25544 : parseInt(currentPOV,10);
+    var sat = sats[focusId];
+    if (sat && !sat.offline && sat.lat !== undefined) {
+      setText('v-lat',  fmtC(sat.lat,'N','S'));
+      setText('v-lon',  fmtC(sat.lon,'E','W'));
+      setHtml('v-alt',  (sat.alt?sat.alt.toFixed(1):'—')+'<span class="chip-unit">km</span>');
+      setHtml('v-vel',  (sat.velocity?(sat.velocity/1000).toFixed(2):'—')+'<span class="chip-unit">km/s</span>');
+      setHtml('v-foot', (sat.footprint?Math.round(sat.footprint):'—')+'<span class="chip-unit">km</span>');
+      setText('v-vis',  (sat.visibility||'—').toUpperCase());
+    }
+    var cat = SATELLITE_CATALOG[focusId];
+    if (cat) setText('v-inc', cat.inc+'°');
+    setText('v-sat-count', Object.keys(sats).length+' SAT');
+    var povLabels = { my_location:'MY LOCATION', global:'GLOBAL' };
+    setText('v-pov-mode', povLabels[currentPOV] || (cat && cat.short) || currentPOV);
+    if (mode === 'demo') setText('v-status', 'DEMO');
+
+    /* Nearby list for MY LOCATION pov */
+    var nearbyEl = document.getElementById('nearby-list');
+    var stripR   = document.getElementById('strip-right');
+    if (currentPOV === 'my_location' && myLat !== null) {
+      if (nearbyEl) nearbyEl.style.display = 'flex';
+      if (stripR)   stripR.style.display   = 'none';
+      renderNearby(sats);
+    } else {
+      if (nearbyEl) nearbyEl.style.display = 'none';
+      if (stripR)   stripR.style.display   = 'flex';
+    }
+
+    /* Overhead alert */
+    var alert = document.getElementById('overhead-alert');
+    if (alert && myLat !== null) {
+      var any = false;
+      Object.keys(sats).forEach(function(idStr) {
+        var s2 = sats[idStr]; var c2 = SATELLITE_CATALOG[parseInt(idStr,10)];
+        if (!s2||s2.offline||s2.lat===undefined||!c2) return;
+        var dist = Tracker.haversine(myLat,myLon,s2.lat,s2.lon);
+        if (dist < 900) {
+          setText('oa-name', '⚡ '+c2.short+' OVERHEAD');
+          setText('oa-sub',  Math.round(dist)+' km away · Alt '+c2.alt+' km');
+          any = true;
+        }
+      });
+      alert.classList.toggle('show', any);
+    }
+  }
+
+  function renderNearby(sats) {
+    var el = document.getElementById('nearby-list'); if (!el) return;
+    var items = [];
+    Object.keys(sats).forEach(function(idStr) {
+      var id = parseInt(idStr,10); var s = sats[id]; var cat = SATELLITE_CATALOG[id];
+      if (!s||s.offline||s.lat===undefined||!cat) return;
+      items.push({ cat:cat, dist:Tracker.haversine(myLat,myLon,s.lat,s.lon) });
+    });
+    items.sort(function(a,b){ return a.dist-b.dist; });
+    el.innerHTML = items.slice(0,6).map(function(it){
+      return '<div class="nearby-item">'+
+        '<div class="nearby-dot" style="background:'+it.cat.color+';box-shadow:0 0 5px '+it.cat.color+'"></div>'+
+        '<div class="nearby-info"><div class="nearby-name">'+it.cat.emoji+' '+it.cat.short+'</div>'+
+        '<div class="nearby-dist">'+Math.round(it.dist).toLocaleString()+' km</div></div></div>';
+    }).join('');
+  }
+
+  function setText(id, v)    { var el=document.getElementById(id); if(el) el.textContent=v; }
+  function setHtml(id, v)    { var el=document.getElementById(id); if(el) el.innerHTML=v; }
+  function fmtC(v, p, n)     { if(v==null) return '—'; return Math.abs(v).toFixed(3)+'° '+(v>=0?p:n); }
 })();
 </script>
 </body>
